@@ -3,71 +3,134 @@
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-26.05";
+    flake-utils.url = "github:numtide/flake-utils";
   };
 
   outputs =
     {
       self,
       nixpkgs,
+      flake-utils,
     }:
-    let
-      pkgs = nixpkgs.legacyPackages.x86_64-linux;
+    flake-utils.lib.eachDefaultSystem (
+      system:
+      let
+        pkgs = nixpkgs.legacyPackages.${system};
+        lib = pkgs.lib;
 
-      desktopItem = pkgs.makeDesktopItem {
-        name = "raddbg";
-        desktopName = "RAD Debugger";
-        genericName = "RAD Debugger";
-        comment = "RAD Debugger";
-        exec = "raddbg";
-        terminal = false;
-        type = "Application";
-        categories = [
-          "Development"
-        ];
-      };
-    in
-    {
-      packages.x86_64-linux.default = pkgs.stdenv.mkDerivation {
-        name = "raddbg";
-        version = "0.9.29-alpha";
-        src = pkgs.fetchgit {
-          url = "https://github.com/epicgames/raddebugger";
-          rev = "cd41ba199bbe091d348a9b2be5a3528cb8acbff0";
-          hash = "sha256-IQNicRWKdIamDeQU1RRceRR2QgoUlomQYoeCgepO10w=";
+        desktopItem = pkgs.makeDesktopItem {
+          name = "raddbg";
+          desktopName = "RAD Debugger";
+          genericName = "RAD Debugger";
+          comment = "RAD Debugger";
+          exec = "raddbg";
+          terminal = false;
+          type = "Application";
+          categories = [ "Development" ];
         };
 
-        buildInputs = [
-          pkgs.makeWrapper
-          pkgs.stdenv.cc.cc
-          pkgs.patsh
-          pkgs.git
-          pkgs.libX11
-          pkgs.libXext
-          pkgs.libXfixes
-          pkgs.freetype
-          pkgs.libGL
-        ];
+        mkRaddebugger =
+          {
+            buildRadbin ? true,
+            buildRadlink ? true,
+            buildRaddbgNonGraphical ? true,
+            buildTorture ? true,
+          }:
+          pkgs.stdenv.mkDerivation {
+            pname = "raddbg";
+            version = "0.9.29-alpha";
 
-        postPatch = ''
-          patchShebangs build.sh
-        '';
+            src = pkgs.fetchgit {
+              url = "https://github.com/epicgames/raddebugger";
+              rev = "cd41ba199bbe091d348a9b2be5a3528cb8acbff0";
+              hash = "sha256-IQNicRWKdIamDeQU1RRceRR2QgoUlomQYoeCgepO10w=";
+            };
 
-        buildPhase = ''
-          git init
-          git add .
-          git config user.email "you@example.com"
-          git config user.name "Your Name"
-          git commit -m "1"
+            nativeBuildInputs = [
+              pkgs.makeWrapper
+              pkgs.patsh
+              pkgs.git
+            ];
 
-          sed -i "s/-fdiagnostics-absolute-paths //g" build.sh
-          ./build.sh
+            buildInputs = [
+              pkgs.stdenv.cc.cc
+              pkgs.libX11
+              pkgs.libXext
+              pkgs.libXfixes
+              pkgs.freetype
+              pkgs.libGL
+            ];
 
-          mkdir -p "$out/bin"
-          cp build/raddbg "$out/bin"
+            postPatch = ''
+              patchShebangs build.sh
+            '';
 
-          mkdir -p "$out/share/applications"
-          cp "${desktopItem}/share/applications/raddbg.desktop" "$out/share/applications"
-        '';
-      };
-    };
+            buildPhase = ''
+              runHook preBuild
+
+              git init
+              git add .
+              git config user.email "you@example.com"
+              git config user.name "Your Name"
+              git commit -m "1"
+
+              sed -i "s/-fdiagnostics-absolute-paths //g" build.sh
+
+              radbin=${if buildRadbin then "1" else "0"} \
+              radlink=${if buildRadlink then "1" else "0"} \
+              raddbg_non_graphical=${if buildRaddbgNonGraphical then "1" else "0"} \
+              torture=${if buildTorture then "1" else "0"} \
+              ./build.sh
+
+              runHook postBuild
+            '';
+
+            installPhase = ''
+              runHook preInstall
+
+              mkdir -p "$out/bin"
+
+              install -Dm755 build/raddbg "$out/bin/raddbg"
+
+              ${lib.optionalString buildRadbin ''
+                install -Dm755 build/radbin "$out/bin/radbin"
+              ''}
+
+              ${lib.optionalString buildRadlink ''
+                install -Dm755 build/radlink "$out/bin/radlink"
+              ''}
+
+              ${lib.optionalString buildRaddbgNonGraphical ''
+                install -Dm755 build/raddbg_non_graphical \
+                  "$out/bin/raddbg_non_graphical"
+              ''}
+
+              ${lib.optionalString buildTorture ''
+                install -Dm755 build/torture "$out/bin/torture"
+              ''}
+
+              mkdir -p "$out/share/applications"
+              install -Dm644 \
+                "${desktopItem}/share/applications/raddbg.desktop" \
+                "$out/share/applications/raddbg.desktop"
+
+              runHook postInstall
+            '';
+          };
+      in
+      {
+        packages = {
+          default = mkRaddebugger { };
+
+          minimal = mkRaddebugger {
+            buildRadbin = false;
+            buildRadlink = false;
+            buildRaddbgNonGraphical = false;
+            buildTorture = false;
+          };
+        };
+
+        lib.mkRaddebugger = mkRaddebugger;
+      }
+    );
 }
