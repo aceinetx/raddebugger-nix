@@ -42,8 +42,8 @@
 
             src = pkgs.fetchgit {
               url = "https://github.com/epicgames/raddebugger";
-              rev = "cd41ba199bbe091d348a9b2be5a3528cb8acbff0";
-              hash = "sha256-IQNicRWKdIamDeQU1RRceRR2QgoUlomQYoeCgepO10w=";
+              rev = "b6d8c3fd9eaf7b55960d80738365742a8fba9e29";
+              hash = "sha256-rBGvDwYTX+s7ArSxBBeEWbGLF031OaOfubK8+KUl+xU=";
             };
 
             nativeBuildInputs = [
@@ -56,6 +56,7 @@
               pkgs.stdenv.cc.cc
               pkgs.libX11
               pkgs.libXext
+              pkgs.libXrandr
               pkgs.libXfixes
               pkgs.freetype
               pkgs.libGL
